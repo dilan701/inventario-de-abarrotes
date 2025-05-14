@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Inventario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .menu {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .menu button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .menu button:hover {
+            background-color: #45a049;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .hidden {
+            display: none;
+        }
+        .alert {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Inventario</h1>
+        
+        <div class="menu">
+            <button onclick="mostrarSeccion('ver-inventario')">Ver Inventario</button>
+            <button onclick="mostrarSeccion('agregar-producto')">Agregar Producto</button>
+            <button onclick="mostrarSeccion('eliminar-producto')">Eliminar Producto</button>
+            <button onclick="mostrarProductosFaltantes()">Productos Faltantes</button>
+            <button onclick="mostrarProductosAgotarse()">Productos por Agotarse</button>
+            <button onclick="mostrarRecomendaciones()">Recomendaciones</button>
+        </div>
+        
+        <!-- Sección Ver Inventario -->
+        <div id="ver-inventario" class="hidden">
+            <h2>Inventario Actual</h2>
+            <div id="inventario-container"></div>
+        </div>
+        
+        <!-- Sección Agregar Producto -->
+        <div id="agregar-producto" class="hidden">
+            <h2>Agregar Nuevo Producto</h2>
+            <form id="form-agregar-producto">
+                <div class="form-group">
+                    <label for="nombre">Nombre:</label>
+                    <input type="text" id="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="categoria">Categoría:</label>
+                    <input type="text" id="categoria" required>
+                </div>
+                <div class="form-group">
+                    <label for="cantidad">Cantidad:</label>
+                    <input type="number" id="cantidad" required>
+                </div>
+                <div class="form-group">
+                    <label for="ubicacion">Ubicación:</label>
+                    <input type="text" id="ubicacion" required>
+                </div>
+                <div class="form-group">
+                    <label for="stock-minimo">Stock Mínimo:</label>
+                    <input type="number" id="stock-minimo" required>
+                </div>
+                <div class="form-group">
+                    <label for="fecha-caducidad">Fecha de Caducidad (opcional):</label>
+                    <input type="date" id="fecha-caducidad">
+                </div>
+                <button type="submit">Agregar Producto</button>
+            </form>
+            <div id="agregar-resultado" class="alert hidden"></div>
+        </div>
+        
+        <!-- Sección Eliminar Producto -->
+        <div id="eliminar-producto" class="hidden">
+            <h2>Eliminar Producto</h2>
+            <div id="eliminar-inventario-container"></div>
+            <div class="form-group">
+                <label for="producto-id">ID del Producto a Eliminar:</label>
+                <input type="number" id="producto-id">
+                <button onclick="eliminarProducto()">Eliminar</button>
+            </div>
+            <div id="eliminar-resultado" class="alert hidden"></div>
+        </div>
+        
+        <!-- Sección Productos Faltantes -->
+        <div id="productos-faltantes" class="hidden">
+            <h2>Productos Faltantes (Stock por debajo del mínimo)</h2>
+            <div id="faltantes-container"></div>
+        </div>
+        
+        <!-- Sección Productos por Agotarse -->
+        <div id="productos-agotarse" class="hidden">
+            <h2>Productos por Agotarse (Menos de 5 unidades)</h2>
+            <div id="agotarse-container"></div>
+        </div>
+        
+        <!-- Sección Recomendaciones -->
+        <div id="recomendaciones" class="hidden">
+            <h2>Recomendaciones por Categoría</h2>
+            <div id="recomendaciones-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // Base de datos simulada en localStorage
+        const DATABASE_KEY = 'inventario_db';
+        
+        // Inicializar la base de datos si no existe
+        function initDB() {
+            if (!localStorage.getItem(DATABASE_KEY)) {
+                const productos = {
+                    productos: [
+                        // Productos de limpieza
+                        {id: 1, nombre: "Detergente Líquido", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 1", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 2, nombre: "Jabón para platos", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 1", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 3, nombre: "Limpiador multiusos", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 2", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 4, nombre: "Esponjas", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 2", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 5, nombre: "Toallas de papel", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 3", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 6, nombre: "Cloro", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 3", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 7, nombre: "Amoniaco", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 4", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 8, nombre: "Limón", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 4", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 9, nombre: "Sacos de basura", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 5", stock_minimo: 3, fecha_caducidad: null},
+                        {id: 10, nombre: "Desinfectante", categoria: "Productos de limpieza", cantidad: 10, ubicacion: "Estante 5", stock_minimo: 3, fecha_caducidad: null},
+                        
+                        // Productos de abarrotes
+                        {id: 11, nombre: "Arroz", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 6", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 12, nombre: "Frijoles", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 6", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 13, nombre: "Aceite de cocina", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 7", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 14, nombre: "Azúcar", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 7", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 15, nombre: "Sal", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 8", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 16, nombre: "Pasta", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 8", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 17, nombre: "Harina", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 9", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 18, nombre: "Leche en polvo", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 9", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 19, nombre: "Sopa instantánea", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 10", stock_minimo: 5, fecha_caducidad: null},
+                        {id: 20, nombre: "Café", categoria: "Abarrotes", cantidad: 20, ubicacion: "Estante 10", stock_minimo: 5, fecha_caducidad: null}
+                    ]
+                };
+                localStorage.setItem(DATABASE_KEY, JSON.stringify(productos));
+            }
+        }
+        
+        // Obtener todos los productos
+        function getProductos() {
+            const db = JSON.parse(localStorage.getItem(DATABASE_KEY));
+            return db.productos;
+        }
+        
+        // Agregar un producto
+        function agregarProducto(nombre, categoria, cantidad, ubicacion, stock_minimo, fecha_caducidad = null) {
+            const db = JSON.parse(localStorage.getItem(DATABASE_KEY));
+            const nuevoId = db.productos.length > 0 ? Math.max(...db.productos.map(p => p.id)) + 1 : 1;
+            
+            const nuevoProducto = {
+                id: nuevoId,
+                nombre,
+                categoria,
+                cantidad: parseInt(cantidad),
+                ubicacion,
+                stock_minimo: parseInt(stock_minimo),
+                fecha_caducidad
+            };
+            
+            db.productos.push(nuevoProducto);
+            localStorage.setItem(DATABASE_KEY, JSON.stringify(db));
+            
+            return nuevoProducto;
+        }
+        
+        // Eliminar un producto por ID
+        function eliminarProductoPorId(id) {
+            const db = JSON.parse(localStorage.getItem(DATABASE_KEY));
+            const index = db.productos.findIndex(p => p.id === parseInt(id));
+            
+            if (index !== -1) {
+                const productoEliminado = db.productos.splice(index, 1)[0];
+                localStorage.setItem(DATABASE_KEY, JSON.stringify(db));
+                return productoEliminado;
+            }
+            
+            return null;
+        }
+        
+        // Mostrar sección específica y ocultar las demás
+        function mostrarSeccion(seccionId) {
+            // Ocultar todas las secciones
+            document.querySelectorAll('.container > div').forEach(div => {
+                if (div.id !== 'ver-inventario' && div.classList.contains('hidden')) return;
+                div.classList.add('hidden');
+            });
+            
+            // Mostrar la sección seleccionada
+            const seccion = document.getElementById(seccionId);
+            seccion.classList.remove('hidden');
+            
+            // Actualizar contenido según la sección
+            if (seccionId === 'ver-inventario') {
+                mostrarInventario();
+            } else if (seccionId === 'eliminar-producto') {
+                mostrarInventarioParaEliminar();
+            }
+        }
+        
+        // Mostrar el inventario completo
+        function mostrarInventario() {
+            const productos = getProductos();
+            const container = document.getElementById('inventario-container');
+            
+            if (productos.length === 0) {
+                container.innerHTML = '<p>No hay productos en el inventario.</p>';
+                return;
+            }
+            
+            let html = '<table><tr><th>ID</th><th>Nombre</th><th>Categoría</th><th>Cantidad</th><th>Ubicación</th><th>Stock Mínimo</th><th>Caducidad</th></tr>';
+            
+            productos.forEach(producto => {
+                html += `<tr>
+                    <td>${producto.id}</td>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.categoria}</td>
+                    <td>${producto.cantidad}</td>
+                    <td>${producto.ubicacion}</td>
+                    <td>${producto.stock_minimo}</td>
+                    <td>${producto.fecha_caducidad || 'N/A'}</td>
+                </tr>`;
+            });
+            
+            html += '</table>';
+            container.innerHTML = html;
+        }
+        
+        // Mostrar inventario para eliminar
+        function mostrarInventarioParaEliminar() {
+            const productos = getProductos();
+            const container = document.getElementById('eliminar-inventario-container');
+            
+            if (productos.length === 0) {
+                container.innerHTML = '<p>No hay productos en el inventario.</p>';
+                return;
+            }
+            
+            let html = '<table><tr><th>ID</th><th>Nombre</th><th>Categoría</th><th>Cantidad</th><th>Ubicación</th></tr>';
+            
+            productos.forEach(producto => {
+                html += `<tr>
+                    <td>${producto.id}</td>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.categoria}</td>
+                    <td>${producto.cantidad}</td>
+                    <td>${producto.ubicacion}</td>
+                </tr>`;
+            });
+            
+            html += '</table>';
+            container.innerHTML = html;
+        }
+        
+        // Mostrar productos faltantes (stock <= stock mínimo)
+        function mostrarProductosFaltantes() {
+            const productos = getProductos();
+            const faltantes = productos.filter(p => p.cantidad <= p.stock_minimo);
+            const container = document.getElementById('faltantes-container');
+            
+            mostrarSeccion('productos-faltantes');
+            
+            if (faltantes.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No hay productos faltantes.</div>';
+                return;
+            }
+            
+            let html = '<div class="alert alert-warning">Los siguientes productos necesitan ser comprados:</div>';
+            html += '<table><tr><th>Nombre</th><th>Categoría</th><th>Cantidad</th><th>Ubicación</th><th>Stock Mínimo</th></tr>';
+            
+            faltantes.forEach(producto => {
+                html += `<tr>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.categoria}</td>
+                    <td>${producto.cantidad}</td>
+                    <td>${producto.ubicacion}</td>
+                    <td>${producto.stock_minimo}</td>
+                </tr>`;
+            });
+            
+            html += '</table>';
+            container.innerHTML = html;
+        }
+        
+        // Mostrar productos por agotarse (cantidad <= 5)
+        function mostrarProductosAgotarse() {
+            const productos = getProductos();
+            const porAgotarse = productos.filter(p => p.cantidad <= 5);
+            const container = document.getElementById('agotarse-container');
+            
+            mostrarSeccion('productos-agotarse');
+            
+            if (porAgotarse.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No hay productos que se estén agotando pronto.</div>';
+                return;
+            }
+            
+            let html = '<div class="alert alert-warning">Los siguientes productos podrían acabarse pronto:</div>';
+            html += '<table><tr><th>Nombre</th><th>Categoría</th><th>Cantidad</th><th>Ubicación</th></tr>';
+            
+            porAgotarse.forEach(producto => {
+                html += `<tr>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.categoria}</td>
+                    <td>${producto.cantidad}</td>
+                    <td>${producto.ubicacion}</td>
+                </tr>`;
+            });
+            
+            html += '</table>';
+            container.innerHTML = html;
+        }
+        
+        // Mostrar recomendaciones por categoría
+        function mostrarRecomendaciones() {
+            const productos = getProductos();
+            const categorias = [...new Set(productos.map(p => p.categoria))];
+            const container = document.getElementById('recomendaciones-container');
+            
+            mostrarSeccion('recomendaciones');
+            
+            if (categorias.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No hay categorías disponibles para recomendaciones.</div>';
+                return;
+            }
+            
+            let html = '<div class="alert alert-info">Recomendaciones de productos por categoría:</div><ul>';
+            
+            categorias.forEach(categoria => {
+                html += `<li>${categoria}</li>`;
+            });
+            
+            html += '</ul>';
+            container.innerHTML = html;
+        }
+        
+        // Eliminar producto
+        function eliminarProducto() {
+            const id = document.getElementById('producto-id').value;
+            const resultado = document.getElementById('eliminar-resultado');
+            
+            if (!id) {
+                resultado.textContent = 'Por favor, ingresa un ID válido.';
+                resultado.className = 'alert alert-warning';
+                resultado.classList.remove('hidden');
+                return;
+            }
+            
+            const productoEliminado = eliminarProductoPorId(id);
+            
+            if (productoEliminado) {
+                resultado.textContent = `Producto "${productoEliminado.nombre}" eliminado con éxito.`;
+                resultado.className = 'alert alert-info';
+                resultado.classList.remove('hidden');
+                mostrarInventarioParaEliminar();
+                document.getElementById('producto-id').value = '';
+            } else {
+                resultado.textContent = 'No se encontró un producto con ese ID.';
+                resultado.className = 'alert alert-warning';
+                resultado.classList.remove('hidden');
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('form-agregar-producto').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const nombre = document.getElementById('nombre').value;
+            const categoria = document.getElementById('categoria').value;
+            const cantidad = document.getElementById('cantidad').value;
+            const ubicacion = document.getElementById('ubicacion').value;
+            const stockMinimo = document.getElementById('stock-minimo').value;
+            const fechaCaducidad = document.getElementById('fecha-caducidad').value || null;
+            
+            const producto = agregarProducto(nombre, categoria, cantidad, ubicacion, stockMinimo, fechaCaducidad);
+            
+            const resultado = document.getElementById('agregar-resultado');
+            resultado.textContent = `Producto "${producto.nombre}" de la categoría "${producto.categoria}" agregado con éxito.`;
+            resultado.className = 'alert alert-info';
+            resultado.classList.remove('hidden');
+            
+            // Limpiar el formulario
+            this.reset();
+        });
+        
+        // Inicializar la aplicación
+        window.onload = function() {
+            initDB();
+            mostrarSeccion('ver-inventario');
+        };
+    </script>
+</body>
+</html>
